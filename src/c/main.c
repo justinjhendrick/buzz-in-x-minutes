@@ -8,16 +8,32 @@ static time_t s_end;
 static char s_buffer[BUFFER_LEN];
 static GFont s_font_lg;
 static GFont s_font_md;
+static time_t s_vibe_start_time;
+
+// Vibe pattern in ms
+// Alternates ON/OFF durations
+// starting with ON
+static const uint32_t segments[] = { 400, 300, 400, 300, 400 };
+static const VibePattern vibe_pattern = {
+  .durations = segments,
+  .num_segments = ARRAY_LENGTH(segments),
+};
 
 static void select_click_handler(ClickRecognizerRef recognizer, void *context) {
 }
 
 static void up_click_handler(ClickRecognizerRef recognizer, void *context) {
+  if (s_vibe_start_time != 0) {
+    return;
+  }
   s_end += 60;
   if (s_layer) { layer_mark_dirty(s_layer); }
 }
 
 static void down_click_handler(ClickRecognizerRef recognizer, void *context) {
+  if (s_vibe_start_time != 0) {
+    return;
+  }
   s_end -= 60;
   if (s_layer) { layer_mark_dirty(s_layer); }
 }
@@ -34,7 +50,7 @@ static void draw_text(GContext* ctx, const char* buf, GFont font, GRect bbox, in
   graphics_draw_text(ctx, buf, font, fixed, GTextOverflowModeFill, GTextAlignmentCenter, NULL);
 }
 
-static void draw_date(GContext* ctx, GRect bbox, time_t now) {
+static void draw_time_of_day(GContext* ctx, GRect bbox, time_t now) {
   struct tm* local = localtime(&now);
   if (clock_is_24h_style()) {
     strftime(s_buffer, BUFFER_LEN, "%H:%M", local);
@@ -58,17 +74,25 @@ static void update_layer(Layer* layer, GContext* ctx) {
 
   time_t now = time(NULL);
   int remaining = s_end - now;
-  if (remaining <= 0) {
-    exit_reason_set(APP_EXIT_ACTION_PERFORMED_SUCCESSFULLY);
-    window_stack_pop_all(false);
-  }
   int minutes = remaining / 60;
   int seconds = remaining % 60;
+  if (remaining <= 0) {
+    if (s_vibe_start_time == 0) {
+      s_vibe_start_time = now;
+      vibes_enqueue_custom_pattern(vibe_pattern);
+    } else if (now >= s_vibe_start_time + 2) {
+      exit_reason_set(APP_EXIT_ACTION_PERFORMED_SUCCESSFULLY);
+      window_stack_pop_all(true);
+      return;
+    }
+    minutes = 0;
+    seconds = 0;
+  }
   snprintf(s_buffer, BUFFER_LEN, "%02d\n%02d", minutes, seconds);
   draw_text(ctx, s_buffer, s_font_lg, bounds, 10);
 
   GRect date_bbox = GRect(bounds.origin.x, bounds.origin.y + bounds.size.h, bounds.size.w, date_height);
-  draw_date(ctx, date_bbox, now);
+  draw_time_of_day(ctx, date_bbox, now);
 }
 
 static void tick_handler(struct tm* now, TimeUnits units_changed) {
@@ -100,7 +124,7 @@ static void init(void) {
     .load = window_load,
     .unload = window_unload,
   });
-  window_stack_push(s_window, false);
+  window_stack_push(s_window, true);
 }
 
 static void deinit(void) {

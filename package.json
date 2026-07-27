@@ -19,8 +19,8 @@
     "messageKeys": [],
     "resources": {
       "media": [
-        {"name":  "CHIVO_MONO_40", "file": "fonts/ChivoMono-Regular.ttf", "characterRegex": "[ :0-9]", "type": "font" },
-        {"name":  "CHIVO_MONO_90", "file": "fonts/ChivoMono-Regular.ttf", "characterRegex": "[ :0-9]", "type": "font" }
+        {"name":  "CHIVO_MONO_40", "file": "fonts/ChivoMono-Regular.ttf", "characterRegex": "[ :0-9apm]", "type": "font" },
+        {"name":  "CHIVO_MONO_90", "file": "fonts/ChivoMono-Regular.ttf", "characterRegex": "[0-9]", "type": "font" }
       ]
     }
   }
