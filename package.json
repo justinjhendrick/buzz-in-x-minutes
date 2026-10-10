@@ -1,10 +1,12 @@
 {
   "name": "Buzz in X Minutes",
   "author": "justinjhendrick",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "keywords": ["pebble-app"],
   "private": true,
-  "dependencies": {},
+  "dependencies": {
+    "@rebble/clay": "^1.0.8"
+  },
   "pebble": {
     "displayName": "Buzz in X Minutes",
     "uuid": "9108634e-2678-4845-9282-ce56bb4b11ef",
@@ -16,7 +18,12 @@
     "watchapp": {
       "watchface": false
     },
-    "messageKeys": [],
+    "messageKeys": [
+      "up_button_seconds",
+      "select_button_seconds",
+      "down_button_seconds",
+      "reminder_seconds"
+    ],
     "resources": {
       "media": [
         {"name":  "CHIVO_MONO_40", "file": "fonts/ChivoMono-Regular.ttf", "characterRegex": "[ :0-9apm]", "type": "font" },

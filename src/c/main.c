@@ -1,7 +1,6 @@
 #include <pebble.h>
 
 #define BUFFER_LEN (40)
-#define ENABLE_BUTTON_HINTS (false)
 
 static Window* s_window;
 static Layer* s_layer;
@@ -9,7 +8,13 @@ static time_t s_end;
 static char s_buffer[BUFFER_LEN];
 static GFont s_font_lg;
 static GFont s_font_md;
-static time_t s_vibe_start_time;
+
+static bool s_timer_expired = false;
+
+static int s_up_button_seconds = 60;
+static int s_select_button_seconds = 600;
+static int s_down_button_seconds = -60;
+static int s_reminder_seconds = 0;
 
 // Vibe pattern in ms
 // Alternates ON/OFF durations
@@ -21,34 +26,32 @@ static const VibePattern vibe_pattern = {
 };
 
 static void end_time_add(int seconds_change) {
-  if (s_vibe_start_time != 0) {
-    return;
-  }
+  if (s_timer_expired) return;
   s_end += seconds_change;
-  if (s_layer) { layer_mark_dirty(s_layer); }
-}
-
-static void select_click_handler(ClickRecognizerRef recognizer, void *context) {
-  end_time_add(600);
+  if (s_layer) layer_mark_dirty(s_layer);
 }
 
 static void up_click_handler(ClickRecognizerRef recognizer, void *context) {
-  end_time_add(60);
+  end_time_add(s_up_button_seconds);
+}
+
+static void select_click_handler(ClickRecognizerRef recognizer, void *context) {
+  end_time_add(s_select_button_seconds);
 }
 
 static void down_click_handler(ClickRecognizerRef recognizer, void *context) {
-  end_time_add(-60);
+  end_time_add(s_down_button_seconds);
 }
 
 static void click_config_provider(void *context) {
-  window_single_click_subscribe(BUTTON_ID_SELECT, select_click_handler);
-  window_single_repeating_click_subscribe(BUTTON_ID_SELECT, 500, select_click_handler);
-
   window_single_click_subscribe(BUTTON_ID_UP, up_click_handler);
-  window_single_repeating_click_subscribe(BUTTON_ID_UP, 250, up_click_handler);
+  window_single_repeating_click_subscribe(BUTTON_ID_UP, 375, up_click_handler);
+
+  window_single_click_subscribe(BUTTON_ID_SELECT, select_click_handler);
+  window_single_repeating_click_subscribe(BUTTON_ID_SELECT, 375, select_click_handler);
 
   window_single_click_subscribe(BUTTON_ID_DOWN, down_click_handler);
-  window_single_repeating_click_subscribe(BUTTON_ID_DOWN, 250, down_click_handler);
+  window_single_repeating_click_subscribe(BUTTON_ID_DOWN, 375, down_click_handler);
 }
 
 static void draw_text(GContext* ctx, const char* buf, GFont font, GRect bbox, int shift_up, GTextAlignment align) {
@@ -70,31 +73,20 @@ static void draw_time_of_day(GContext* ctx, GRect bbox, time_t now) {
   draw_text(ctx, s_buffer, s_font_md, bbox, 6, GTextAlignmentCenter);
 }
 
-static void draw_button_hints(GContext* ctx, GRect bounds) {
-  int border = 2;
-  GRect bbox;
-  GFont font = fonts_get_system_font(FONT_KEY_GOTHIC_28_BOLD);
-  graphics_context_set_text_color(ctx, GColorWhite);
-  GSize sz = GSize(60, 30);
-  bbox.size = sz;
+static void trigger_exit() {
+  exit_reason_set(APP_EXIT_ACTION_PERFORMED_SUCCESSFULLY);
+  window_stack_pop_all(true);
+}
 
-  bbox.origin = GPoint(bounds.origin.x + border, bounds.origin.y + 25);
-  draw_text(ctx, "X", font, bbox, 4, GTextAlignmentLeft);
-
-  bbox.origin = GPoint(bounds.origin.x + bounds.size.w - sz.w - border, bounds.origin.y + 25);
-  draw_text(ctx, "+1", font, bbox, 4, GTextAlignmentRight);
-
-  bbox.origin = GPoint(bounds.origin.x + bounds.size.w - sz.w - border, bounds.origin.y + bounds.size.h / 2 - sz.h / 2);
-  draw_text(ctx, "+10", font, bbox, 4, GTextAlignmentRight);
+static void reminder() {
+  vibes_long_pulse();
+  app_timer_register(s_reminder_seconds * 1000, reminder, NULL);
 }
 
 static void update_layer(Layer* layer, GContext* ctx) {
   GRect bounds = layer_get_bounds(layer);
   graphics_context_set_fill_color(ctx, GColorBlack);
   graphics_fill_rect(ctx, bounds, 0, GCornerNone);
-  if (ENABLE_BUTTON_HINTS) {
-    draw_button_hints(ctx, bounds);
-  }
 
   int date_height = 40;
   bounds.size.h -= date_height;
@@ -104,12 +96,15 @@ static void update_layer(Layer* layer, GContext* ctx) {
   int minutes = remaining / 60;
   int seconds = remaining % 60;
   if (remaining <= 0) {
-    if (s_vibe_start_time == 0) {
-      s_vibe_start_time = now;
+    if (!s_timer_expired) {
+      // First frame after the timer expired
+      s_timer_expired = true;
       vibes_enqueue_custom_pattern(vibe_pattern);
-    } else if (now >= s_vibe_start_time + 3) {
-      exit_reason_set(APP_EXIT_ACTION_PERFORMED_SUCCESSFULLY);
-      window_stack_pop_all(true);
+      if (s_reminder_seconds <= 0) {
+        app_timer_register(3000, trigger_exit, NULL);
+      } else {
+        app_timer_register(s_reminder_seconds * 1000, reminder, NULL);
+      }
     }
     minutes = 0;
     seconds = 0;
@@ -124,7 +119,31 @@ static void update_layer(Layer* layer, GContext* ctx) {
 }
 
 static void tick_handler(struct tm* now, TimeUnits units_changed) {
-  layer_mark_dirty(s_layer);
+  if (s_layer) layer_mark_dirty(s_layer);
+}
+
+static void load_settings() {
+  if (persist_exists(MESSAGE_KEY_up_button_seconds))     s_up_button_seconds     = persist_read_int(MESSAGE_KEY_up_button_seconds);
+  if (persist_exists(MESSAGE_KEY_select_button_seconds)) s_select_button_seconds = persist_read_int(MESSAGE_KEY_select_button_seconds);
+  if (persist_exists(MESSAGE_KEY_down_button_seconds))   s_down_button_seconds   = persist_read_int(MESSAGE_KEY_down_button_seconds);
+  if (persist_exists(MESSAGE_KEY_reminder_seconds))      s_reminder_seconds      = persist_read_int(MESSAGE_KEY_reminder_seconds);
+}
+
+static void save_settings() {
+  persist_write_int(MESSAGE_KEY_up_button_seconds,     s_up_button_seconds);
+  persist_write_int(MESSAGE_KEY_select_button_seconds, s_select_button_seconds);
+  persist_write_int(MESSAGE_KEY_down_button_seconds,   s_down_button_seconds);
+  persist_write_int(MESSAGE_KEY_reminder_seconds,      s_reminder_seconds);
+}
+
+static void inbox_received_handler(DictionaryIterator *iter, void *context) {
+  Tuple* t;
+  if ((t = dict_find(iter, MESSAGE_KEY_up_button_seconds)))     s_up_button_seconds     = t->value->int32;
+  if ((t = dict_find(iter, MESSAGE_KEY_select_button_seconds))) s_select_button_seconds = t->value->int32;
+  if ((t = dict_find(iter, MESSAGE_KEY_down_button_seconds)))   s_down_button_seconds   = t->value->int32;
+  if ((t = dict_find(iter, MESSAGE_KEY_reminder_seconds)))      s_reminder_seconds      = t->value->int32;
+  save_settings();
+  if (s_layer) layer_mark_dirty(s_layer);
 }
 
 static void window_load(Window* window) {
@@ -144,6 +163,11 @@ static void window_unload(Window *window) {
 
 static void init(void) {
   s_end = time(NULL) + 60;
+
+  load_settings();
+  app_message_register_inbox_received(inbox_received_handler);
+  app_message_open(app_message_inbox_size_maximum() / 2, app_message_outbox_size_maximum() / 2);
+
   s_window = window_create();
   s_font_lg = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_CHIVO_MONO_90));
   s_font_md = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_CHIVO_MONO_40));
