@@ -15,6 +15,7 @@ static int s_up_button_seconds = 60;
 static int s_select_button_seconds = 600;
 static int s_down_button_seconds = -60;
 static int s_reminder_seconds = 0;
+static int s_initial_timer_seconds = 60;
 
 // Vibe pattern in ms
 // Alternates ON/OFF durations
@@ -123,6 +124,7 @@ static void tick_handler(struct tm* now, TimeUnits units_changed) {
 }
 
 static void load_settings() {
+  if (persist_exists(MESSAGE_KEY_initial_timer_seconds)) s_initial_timer_seconds = persist_read_int(MESSAGE_KEY_initial_timer_seconds);
   if (persist_exists(MESSAGE_KEY_up_button_seconds))     s_up_button_seconds     = persist_read_int(MESSAGE_KEY_up_button_seconds);
   if (persist_exists(MESSAGE_KEY_select_button_seconds)) s_select_button_seconds = persist_read_int(MESSAGE_KEY_select_button_seconds);
   if (persist_exists(MESSAGE_KEY_down_button_seconds))   s_down_button_seconds   = persist_read_int(MESSAGE_KEY_down_button_seconds);
@@ -130,6 +132,7 @@ static void load_settings() {
 }
 
 static void save_settings() {
+  persist_write_int(MESSAGE_KEY_initial_timer_seconds, s_initial_timer_seconds);
   persist_write_int(MESSAGE_KEY_up_button_seconds,     s_up_button_seconds);
   persist_write_int(MESSAGE_KEY_select_button_seconds, s_select_button_seconds);
   persist_write_int(MESSAGE_KEY_down_button_seconds,   s_down_button_seconds);
@@ -138,6 +141,7 @@ static void save_settings() {
 
 static void inbox_received_handler(DictionaryIterator *iter, void *context) {
   Tuple* t;
+  if ((t = dict_find(iter, MESSAGE_KEY_initial_timer_seconds))) s_initial_timer_seconds = t->value->int32;
   if ((t = dict_find(iter, MESSAGE_KEY_up_button_seconds)))     s_up_button_seconds     = t->value->int32;
   if ((t = dict_find(iter, MESSAGE_KEY_select_button_seconds))) s_select_button_seconds = t->value->int32;
   if ((t = dict_find(iter, MESSAGE_KEY_down_button_seconds)))   s_down_button_seconds   = t->value->int32;
@@ -162,9 +166,8 @@ static void window_unload(Window *window) {
 }
 
 static void init(void) {
-  s_end = time(NULL) + 60;
-
   load_settings();
+  s_end = time(NULL) + s_initial_timer_seconds;
   app_message_register_inbox_received(inbox_received_handler);
   app_message_open(app_message_inbox_size_maximum() / 2, app_message_outbox_size_maximum() / 2);
 

@@ -3,6 +3,7 @@
   {
     "type": "section",
     "items": [
+      { "type": "input", "serializeValueAs": "integer", "messageKey": "initial_timer_seconds", "defaultValue": 60,   "label": "initial_timer_seconds" },
       { "type": "input", "serializeValueAs": "integer", "messageKey": "up_button_seconds",     "defaultValue": 60,   "label": "up_button_seconds"     },
       { "type": "input", "serializeValueAs": "integer", "messageKey": "select_button_seconds", "defaultValue": 600,  "label": "select_button_seconds" },
       { "type": "input", "serializeValueAs": "integer", "messageKey": "down_button_seconds",   "defaultValue": -60,  "label": "down_button_seconds"   },
